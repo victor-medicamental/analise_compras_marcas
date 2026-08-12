@@ -336,7 +336,7 @@
       </div>
       <div class="item">
         <h3>Cálculo do VMD</h3>
-        <p>O VMD em R$/dia não é calculado nesta planilha: vem de uma extração dedicada, que apura a média diária considerando <strong>somente os dias válidos de venda</strong> de cada item por centro — os dias em que houve estoque disponível, dentro dos 65 dias úteis da janela. Assim a ruptura deixa de puxar o VMD para baixo. Por isso ele não reproduz a conta "venda no período ÷ dias válidos": as colunas de venda e dias ao lado são informativas.</p>
+        <p>O VMD em R$/dia não é calculado nesta planilha: vem de uma extração dedicada, que apura a média diária considerando <strong>somente os dias válidos de venda</strong> de cada item por centro — os dias em que houve estoque disponível, dentro dos 65 dias úteis da janela. Assim a ruptura deixa de puxar o VMD para baixo.</p>
       </div>
       <div class="item">
         <h3>Share</h3>
@@ -470,7 +470,6 @@ const COLS = [
   {label:'Estoque Atual (un)', idx:5, type:'int'},
   {label:'Estoque Atual (R$)', idx:6, type:'cur'},
   {label:'Compras Aberto (un)', idx:7, type:'int'},
-  {label:'Venda no período (un)', idx:8, type:'int'},
   {label:'Dias válidos de venda', idx:9, type:'int'},
   {label:'VMD Atual (R$/dia)', idx:11, type:'cur'},
   {label:'Share (%)', idx:13, type:'pct'},
