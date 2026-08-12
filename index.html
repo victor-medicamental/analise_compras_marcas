@@ -56,6 +56,11 @@
     border-radius:8px; font-size:13px; font-family:inherit; background:#fff; color:var(--text-primary);
   }
   .off-add input:focus{ outline:none; border-color:var(--blue-400); box-shadow:0 0 0 3px rgba(47,127,196,0.15); }
+  .off-add select{
+    padding:8px 10px; border:1px solid var(--border-strong); border-radius:8px;
+    font-size:13px; font-family:inherit; background:#fff; color:var(--text-primary); cursor:pointer;
+  }
+  .off-add select:focus{ outline:none; border-color:var(--blue-400); box-shadow:0 0 0 3px rgba(47,127,196,0.15); }
   .off-bar{
     display:none; align-items:center; flex-wrap:wrap; gap:8px;
     margin-top:14px; padding:12px 14px;
@@ -467,9 +472,10 @@
           </div>
         </div>
         <div class="filter-group">
-          <label>Desativar produto (c&oacute;digo)</label>
+          <label>Desativar produto (c&oacute;digo + centro)</label>
           <div class="off-add">
             <input type="text" id="off-mat-input" placeholder="Ex: 33141">
+            <select id="off-centro-select"></select>
             <button class="btn" id="off-mat-add">Desativar</button>
           </div>
         </div>
@@ -599,26 +605,27 @@ function fmtCell(v, type){
 
 const state = {
   search:'', centros:new Set(), curvas:new Set(), zmms:new Set(), marcas:new Set(),
-  offMats:new Set(), offMarcas:new Set(),
+  offKeys:new Set(), offMarcas:new Set(),
   sortIdx:null, sortDir:1, page:1, pageSize:100,
 };
 let lastView = [];
 
-/* ---------- desativados (marcação visual) ---------- */
-const OFF_KEY = 'mm_perf_desativados_v1';
+/* ---------- desativados (marcação visual, por Material + Centro) ---------- */
+const OFF_KEY = 'mm_perf_desativados_v2';
+function keyOf(mat, centro){ return mat + '\u0001' + centro; }
 function loadOff(){
   try{
     const raw = window.localStorage.getItem(OFF_KEY);
     if(!raw) return;
     const o = JSON.parse(raw);
-    (o.mats||[]).forEach(m=>state.offMats.add(String(m)));
+    (o.keys||[]).forEach(k=>state.offKeys.add(String(k)));
     (o.marcas||[]).forEach(m=>state.offMarcas.add(String(m)));
   }catch(e){}
 }
 function saveOff(){
-  try{ window.localStorage.setItem(OFF_KEY, JSON.stringify({mats:[...state.offMats], marcas:[...state.offMarcas]})); }catch(e){}
+  try{ window.localStorage.setItem(OFF_KEY, JSON.stringify({keys:[...state.offKeys], marcas:[...state.offMarcas]})); }catch(e){}
 }
-function isOff(r){ return state.offMats.has(r[0]) || state.offMarcas.has(r[2]); }
+function isOff(r){ return state.offKeys.has(keyOf(r[0], r[3])) || state.offMarcas.has(r[2]); }
 loadOff();
 
 const centroWrap = document.getElementById('f-centro');
@@ -829,7 +836,7 @@ function render(){
       const off = isOff(row);
       const cls = [isZ?'zrow':'', off?'offrow':''].filter(Boolean).join(' ');
       html.push('<tr'+(cls?' class="'+cls+'"':'')+'>');
-      html.push('<td class="off-cell"><button class="off-btn" data-mat="'+row[0]+'" title="'+(off?'Reativar':'Desativar')+' produto '+row[0]+'">'+(off?'&#8635;':'&#8709;')+'</button></td>');
+      html.push('<td class="off-cell"><button class="off-btn" data-mat="'+row[0]+'" data-centro="'+row[3]+'" title="'+(off?'Reativar':'Desativar')+' '+row[0]+' no centro '+row[3]+'">'+(off?'&#8635;':'&#8709;')+'</button></td>');
       for(const col of COLS){
         const v = row[col.idx];
         let cls = (col.left ? 'left' : '') + ((col.type==='cur'||col.type==='int'||col.type==='dec1') && v<0 ? ' neg' : '');
@@ -910,6 +917,16 @@ const MAT_DESC = (function(){
   for(const r of RAW_DATA){ if(!m.has(r[0])) m.set(r[0], r[1]); }
   return m;
 })();
+const MAT_CENTROS = (function(){
+  const m = new Map();
+  for(const r of RAW_DATA){
+    if(!m.has(r[0])) m.set(r[0], new Set());
+    m.get(r[0]).add(r[3]);
+  }
+  return m;
+})();
+const offCentroSel = document.getElementById('off-centro-select');
+offCentroSel.innerHTML = '<option value="">Todos os centros</option>' + META.centros.map(c=>'<option value="'+c+'">Centro '+c+'</option>').join('');
 
 const offBtn   = document.getElementById('msel-off-btn');
 const offPanel = document.getElementById('msel-off-panel');
@@ -956,16 +973,24 @@ document.getElementById('msel-off-none').addEventListener('click', ()=>{
 });
 
 const offMatInput = document.getElementById('off-mat-input');
+function flashInput(msg){
+  offMatInput.value='';
+  offMatInput.placeholder = msg;
+  setTimeout(()=>{ offMatInput.placeholder='Ex: 33141'; }, 2400);
+}
 function addOffMat(){
   const v = (offMatInput.value||'').trim();
   if(!v) return;
-  if(!MAT_DESC.has(v)){
-    offMatInput.value='';
-    offMatInput.placeholder = 'Código não encontrado';
-    setTimeout(()=>{ offMatInput.placeholder='Ex: 33141'; }, 2200);
-    return;
+  if(!MAT_CENTROS.has(v)){ flashInput('Código não encontrado'); return; }
+  const centros = MAT_CENTROS.get(v);
+  const sel = offCentroSel.value;
+  if(sel === ''){
+    centros.forEach(c=> state.offKeys.add(keyOf(v, c)));
+  } else {
+    if(!centros.has(sel)){ flashInput('Produto não existe no '+sel); return; }
+    state.offKeys.add(keyOf(v, sel));
   }
-  state.offMats.add(v); saveOff();
+  saveOff();
   offMatInput.value='';
   render();
 }
@@ -975,22 +1000,25 @@ offMatInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDef
 document.getElementById('tbody').addEventListener('click', (e)=>{
   const b = e.target.closest('.off-btn');
   if(!b) return;
-  const mat = b.dataset.mat;
-  if(state.offMats.has(mat)) state.offMats.delete(mat); else state.offMats.add(mat);
+  const k = keyOf(b.dataset.mat, b.dataset.centro);
+  if(state.offKeys.has(k)) state.offKeys.delete(k); else state.offKeys.add(k);
   saveOff(); render();
 });
 
 function renderOffBar(){
   const bar = document.getElementById('off-bar');
-  const nM = state.offMats.size, nB = state.offMarcas.size;
-  if(nM===0 && nB===0){ bar.classList.remove('show'); bar.innerHTML=''; return; }
+  const nK = state.offKeys.size, nB = state.offMarcas.size;
+  if(nK===0 && nB===0){ bar.classList.remove('show'); bar.innerHTML=''; return; }
   const parts = ['<span class="off-title">Desativados</span>'];
   [...state.offMarcas].sort().forEach(m=>{
     parts.push('<span class="off-tag"><span class="kind">MARCA</span>'+esc(m)+'<button data-kind="marca" data-val="'+esc(m)+'" title="Reativar">&times;</button></span>');
   });
-  [...state.offMats].sort().forEach(m=>{
-    const d = MAT_DESC.get(m) || '';
-    parts.push('<span class="off-tag"><span class="kind">PROD</span>'+esc(m)+(d?' &middot; '+esc(d.length>34?d.slice(0,34)+'...':d):'')+'<button data-kind="mat" data-val="'+esc(m)+'" title="Reativar">&times;</button></span>');
+  [...state.offKeys].sort().forEach(k=>{
+    const parts2 = k.split('\u0001');
+    const mat = parts2[0], centro = parts2[1] || '';
+    const d = MAT_DESC.get(mat) || '';
+    const dd = d.length>30 ? d.slice(0,30)+'...' : d;
+    parts.push('<span class="off-tag"><span class="kind">PROD</span>'+esc(mat)+' &middot; <span class="kind">CD</span>'+esc(centro)+(dd?' &middot; '+esc(dd):'')+'<button data-kind="key" data-val="'+esc(k)+'" title="Reativar">&times;</button></span>');
   });
   parts.push('<button class="off-reset" id="off-reset">Reativar todos</button>');
   bar.innerHTML = parts.join('');
@@ -998,12 +1026,12 @@ function renderOffBar(){
   bar.querySelectorAll('.off-tag button').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       if(btn.dataset.kind==='marca') state.offMarcas.delete(btn.dataset.val);
-      else state.offMats.delete(btn.dataset.val);
+      else state.offKeys.delete(btn.dataset.val);
       saveOff(); renderOffMarcaList(offSearch.value); updateOffLabel(); render();
     });
   });
   document.getElementById('off-reset').addEventListener('click', ()=>{
-    state.offMats.clear(); state.offMarcas.clear(); saveOff();
+    state.offKeys.clear(); state.offMarcas.clear(); saveOff();
     renderOffMarcaList(offSearch.value); updateOffLabel(); render();
   });
 }
